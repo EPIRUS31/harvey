@@ -80,8 +80,6 @@ namespace kutil
             return false;
         }
     }
-
-    
 }
 
 #endif KUTIL_H

@@ -8,7 +8,7 @@ NTSTATUS ReadPhysicalMemoryWrapper(PVOID targetAddress, PVOID buffer, SIZE_T siz
 	MM_COPY_ADDRESS copyAddress = { 0 };
 	copyAddress.PhysicalAddress.QuadPart = reinterpret_cast<ULONGLONG>(targetAddress);
 
-	return kport::MmCopyMemory(buffer, copyAddress, size, MM_COPY_MEMORY_PHYSICAL, bytesRead);
+	return MmCopyMemory(buffer, copyAddress, size, MM_COPY_MEMORY_PHYSICAL, bytesRead);
 }
 NTSTATUS WritePhysicalMemoryWrapper(PVOID targetAddress, PVOID buffer, SIZE_T size, SIZE_T* bytesWrote)
 {
@@ -102,73 +102,71 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 }
 UINT64 BruteForceDTB()
 {
-	if (!target::BaseSectionAddress)
+	UINT64 baseAddress = target::BaseSectionAddress;
+	if (!baseAddress)
+	{
 		return 0;
-
+	}
 	virt_addr_t virtualBase;
-	virtualBase.value = (void*)target::BaseSectionAddress;
-	PPHYSICAL_MEMORY_RANGE physicalMemoryRanges = MmGetPhysicalMemoryRanges();
-	if (!physicalMemoryRanges)
+	virtualBase.value = (void*)baseAddress;
+
+	PPHYSICAL_MEMORY_RANGE physicalRanges = MmGetPhysicalMemoryRanges();
+	if (!physicalRanges)
+	{
 		return 0;
+	}
 
 	UINT64 foundDTB = 0;
 	__try
 	{
 		for (int i = 0; ; i++)
 		{
-			PHYSICAL_MEMORY_RANGE range = physicalMemoryRanges[i];
-			if (!range.BaseAddress.QuadPart || !range.NumberOfBytes.QuadPart)
+			PHYSICAL_MEMORY_RANGE currentRange = { 0 };
+			RtlCopyMemory(&currentRange, &physicalRanges[i], sizeof(PHYSICAL_MEMORY_RANGE));
+			if (!currentRange.BaseAddress.QuadPart || !currentRange.NumberOfBytes.QuadPart)
+			{
 				break;
+			}
 
-			UINT64 currentPhysical = range.BaseAddress.QuadPart;
-			UINT64 rangeEnd = currentPhysical + range.NumberOfBytes.QuadPart;
+			UINT64 currentPhysical = currentRange.BaseAddress.QuadPart;
+			UINT64 rangeEnd = currentPhysical + currentRange.NumberOfBytes.QuadPart;
 
-			for (; currentPhysical < rangeEnd; currentPhysical += 0x1000)
+			for (; currentPhysical < rangeEnd; currentPhysical += PAGE_SIZE)
 			{
 				MMPTE pml4Entry = { 0 };
 				SIZE_T bytesRead = 0;
-				if (!NT_SUCCESS(ReadPhysicalMemoryWrapper(
-					(PVOID)(currentPhysical + 8 * virtualBase.pml4_index),
+				UINT64 pml4Addr = currentPhysical + 8 * virtualBase.pml4_index;
+				NTSTATUS status = ReadPhysicalMemoryWrapper(
+					(PVOID)pml4Addr,
 					&pml4Entry,
 					sizeof(MMPTE),
-					&bytesRead)) || bytesRead != sizeof(MMPTE) || !pml4Entry.u.Hard.Valid)
+					&bytesRead
+				);
+				if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE))
+				{
+					continue;
+				}
+				
+				if (!pml4Entry.u.Hard.Valid)
 					continue;
 
-				MMPTE pdptEntry = { 0 };
-				if (!NT_SUCCESS(ReadPhysicalMemoryWrapper(
-					(PVOID)((pml4Entry.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pdpt_index),
-					&pdptEntry,
-					sizeof(MMPTE),
-					&bytesRead)) || bytesRead != sizeof(MMPTE) || !pdptEntry.u.Hard.Valid)
-					continue;
-
-				MMPTE pdEntry = { 0 };
-				if (!NT_SUCCESS(ReadPhysicalMemoryWrapper(
-					(PVOID)((pdptEntry.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pd_index),
-					&pdEntry,
-					sizeof(MMPTE),
-					&bytesRead)) || bytesRead != sizeof(MMPTE) || !pdEntry.u.Hard.Valid)
-					continue;
-
-				MMPTE ptEntry = { 0 };
-				if (!NT_SUCCESS(ReadPhysicalMemoryWrapper(
-					(PVOID)((pdEntry.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pt_index),
-					&ptEntry,
-					sizeof(MMPTE),
-					&bytesRead)) || bytesRead != sizeof(MMPTE) || !ptEntry.u.Hard.Valid)
-					continue;
-
-				UINT64 physicalBase = TranslateLinearAddress(currentPhysical, target::BaseSectionAddress);
+				UINT64 physicalBase = TranslateLinearAddress(currentPhysical, baseAddress);
 				if (!physicalBase)
+				{
 					continue;
+				}
 
 				char buffer[sizeof(_IMAGE_DOS_HEADER)] = { 0 };
-				if (!NT_SUCCESS(ReadPhysicalMemoryWrapper(
+				status = ReadPhysicalMemoryWrapper(
 					(PVOID)physicalBase,
 					buffer,
 					sizeof(_IMAGE_DOS_HEADER),
-					&bytesRead)) || bytesRead != sizeof(_IMAGE_DOS_HEADER))
+					&bytesRead
+				);
+				if (!NT_SUCCESS(status) || bytesRead != sizeof(_IMAGE_DOS_HEADER))
+				{
 					continue;
+				}
 
 				_IMAGE_DOS_HEADER* header = (_IMAGE_DOS_HEADER*)buffer;
 				if (header->e_magic != IMAGE_DOS_SIGNATURE)
@@ -181,11 +179,12 @@ UINT64 BruteForceDTB()
 				break;
 		}
 	}
-	__finally
+	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
-		ExFreePool(physicalMemoryRanges);
+		foundDTB = 0;
 	}
 
+	ExFreePool(physicalRanges);
 	return foundDTB;
 }
 
@@ -202,61 +201,110 @@ namespace target
 			return STATUS_INVALID_PARAMETER;
 
 		NTSTATUS status = STATUS_SUCCESS;
-		//RequestCount++;
-		//if (RequestCount >= 2000 || !DirectoryTableBase)
-		//{
-		//	if (!pTarget)
-		//	{
-		//		status = PsLookupProcessByProcessId((HANDLE)Request->Process, &pTarget);
-		//		if (!NT_SUCCESS(status))
-		//			return status;
-		//	}
-		//
-		//	BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(pTarget);
-		//	if (!BaseSectionAddress)
-		//	{
-		//		status = STATUS_INVALID_ADDRESS;
-		//		return status;
-		//	}
-		//
-		//	DirectoryTableBase = BruteForceDTB();
-		//	if (!DirectoryTableBase)
-		//	{
-		//		status = STATUS_INVALID_ADDRESS;
-		//		return status;
-		//	}
-		//	RequestCount = 0;
-		//}
 
-		//UINT64 Physical = TranslateLinearAddress(DirectoryTableBase, (UINT64)Request->Address);
-		//if (!Physical)
-		//{
-		//	status = STATUS_INVALID_ADDRESS;
-		//}
-		//
-		//SIZE_T alignedSize = min(PAGE_SIZE - (Physical & 0xFFF), Request->BufferSize);
-		//if (alignedSize > PAGE_SIZE)
-		//{
-		//	status = STATUS_INVALID_LEVEL;
-		//}
+		RequestCount++;
+		if (RequestCount >= 2000 || !DirectoryTableBase)
+		{
+			if (!pTarget)
+			{
+				status = PsLookupProcessByProcessId((HANDLE)Request->Process, &pTarget);
+				if (!NT_SUCCESS(status))
+				{
+					return status;
+				}
+			}
 
-		Klog("Raw BaseSectionAddress: %llu", (UINT64)&BaseSectionAddress);
-		Klog("Raw DirectoryTableBase: %llu", (UINT64)&DirectoryTableBase);
-		Klog("Value BaseSectionAddress: %llu", (UINT64)BaseSectionAddress);
-		Klog("Value DirectoryTableBase: %llu", (UINT64)DirectoryTableBase);
+			BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(pTarget);
+			if (!BaseSectionAddress)
+			{
+				status = STATUS_INVALID_ADDRESS;
+				return status;
+			}
 
-		// Test Klog with literals
-		Klog("Test literal zero: %llu", (UINT64)0);
-		Klog("Test literal one: %llu", (UINT64)1);
+			DirectoryTableBase = BruteForceDTB();
+			if (!DirectoryTableBase)
+			{
+				status = STATUS_INVALID_ADDRESS;
+				return status;
+			}
+			RequestCount = 0;
+		}
+
+		UINT64 Physical = TranslateLinearAddress(DirectoryTableBase, (UINT64)Request->Address);
+		if (!Physical)
+		{
+			status = STATUS_INVALID_ADDRESS;
+			return status;
+		}
+
+		SIZE_T alignedSize = min(PAGE_SIZE - (Physical & 0xFFF), Request->BufferSize);
+		if (alignedSize > PAGE_SIZE)
+		{
+			status = STATUS_INVALID_LEVEL;
+			return status;
+		}
 
 		SIZE_T sizeRead = 0;
-		//status = ReadPhysicalMemoryWrapper((PVOID)Physical, Request->Buffer, alignedSize, &sizeRead);
 
-
+		status = ReadPhysicalMemoryWrapper((PVOID)Physical, Request->Buffer, alignedSize, &sizeRead);
 
 		return status;
 	}
+	NTSTATUS WriteVirtualMemory(SystemRequest* Request)
+	{
+		if (!Request || !Request->Address || !Request->Buffer || !Request->Process || !Request->BufferSize)
+			return STATUS_INVALID_PARAMETER;
 
+		NTSTATUS status = STATUS_SUCCESS;
+
+		RequestCount++;
+		if (RequestCount >= 2000 || !DirectoryTableBase)
+		{
+			if (!pTarget)
+			{
+				status = PsLookupProcessByProcessId((HANDLE)Request->Process, &pTarget);
+				if (!NT_SUCCESS(status))
+				{
+					return status;
+				}
+			}
+
+			BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(pTarget);
+			if (!BaseSectionAddress)
+			{
+				status = STATUS_INVALID_ADDRESS;
+				return status;
+			}
+
+			DirectoryTableBase = BruteForceDTB();
+			if (!DirectoryTableBase)
+			{
+				status = STATUS_INVALID_ADDRESS;
+				return status;
+			}
+			RequestCount = 0;
+		}
+
+		UINT64 Physical = TranslateLinearAddress(DirectoryTableBase, (UINT64)Request->Address);
+		if (!Physical)
+		{
+			status = STATUS_INVALID_ADDRESS;
+			return status;
+		}
+
+		SIZE_T alignedSize = min(PAGE_SIZE - (Physical & 0xFFF), Request->BufferSize);
+		if (alignedSize > PAGE_SIZE)
+		{
+			status = STATUS_INVALID_LEVEL;
+			return status;
+		}
+
+		SIZE_T sizeRead = 0;
+
+		status = WritePhysicalMemoryWrapper((PVOID)Physical, Request->Buffer, alignedSize, &sizeRead);
+
+		return status;
+	}
 }
 
 NTSTATUS deviceiocontrol::IO_IRP_MJ_DEVICE_CONTROL(PDEVICE_OBJECT pDeviceObject, PIRP pIrp)
@@ -267,7 +315,6 @@ NTSTATUS deviceiocontrol::IO_IRP_MJ_DEVICE_CONTROL(PDEVICE_OBJECT pDeviceObject,
 	SystemRequest* request = (SystemRequest*)pIrp->AssociatedIrp.SystemBuffer;
 	NTSTATUS status = STATUS_SUCCESS;
 
-	// Check if SystemBuffer is null or input buffer length is insufficient
 	if (!pIrp->AssociatedIrp.SystemBuffer ||
 		irpStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(SystemRequest))
 	{
@@ -284,18 +331,12 @@ NTSTATUS deviceiocontrol::IO_IRP_MJ_DEVICE_CONTROL(PDEVICE_OBJECT pDeviceObject,
 	switch (request->CALL)
 	{
 	case SystemRequest::read:
-		DbgPrint("[IO_IRP_MJ_DEVICE_CONTROL] Request - Address: 0x%p, Buffer: 0x%p, Size: %zu, PID: %d, Call: %d\n",
-			request->Address, request->Buffer, request->BufferSize, request->Process, request->CALL);
-
 		status = target::ReadVirtualMemory(request);
-
 		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
 		break;
 
 	case SystemRequest::write:
-		DbgPrint("[IO_IRP_MJ_DEVICE_CONTROL] Request - Address: 0x%p, Buffer: 0x%p, Size: %zu, PID: %d, Call: %d\n",
-			request->Address, request->Buffer, request->BufferSize, request->Process, request->CALL);
-		//status = target::WriteVirtualMemory(request);
+		status = target::WriteVirtualMemory(request);
 		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
 		break;
 

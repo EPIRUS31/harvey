@@ -3,7 +3,7 @@
 
 #include "include.h"
 
-inline BOOLEAN DEBUG = true;
+inline BOOLEAN DEBUG = false;
 
 inline void Klog(const char* const _Format, ...) {
     if (!DEBUG)
@@ -11,7 +11,7 @@ inline void Klog(const char* const _Format, ...) {
 
     va_list args;
     va_start(args, _Format);
-    DbgPrint(_Format, args);
+    vDbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, _Format, args);
     va_end(args);
 }
 #endif // KLOG_H
