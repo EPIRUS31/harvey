@@ -5,12 +5,12 @@
 
 namespace KGLOBAL
 {
-	UNICODE_STRING DeviceName;
-	UNICODE_STRING SymbolicName;
-	UNICODE_STRING CustomSymbolicName;
-
-	BOOLEAN BlockDebugging = false;
-	BOOLEAN ManualMapped;
+	inline UNICODE_STRING DeviceName = { 0 };
+	inline UNICODE_STRING SymbolicName = { 0 };
+	inline UNICODE_STRING CustomSymbolicName = { 0 };
+	 
+	inline BOOLEAN BlockDebugging = false;
+	inline BOOLEAN ManualMapped;
 }
 
 #endif CONFIG_H

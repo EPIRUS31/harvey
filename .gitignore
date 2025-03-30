@@ -32,3 +32,4 @@
 *.app
 /kernel/.vs
 /kernel/x64
+/usermode/x64

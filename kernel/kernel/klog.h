@@ -3,9 +3,9 @@
 
 #include "include.h"
 
-BOOLEAN DEBUG = false;
+inline BOOLEAN DEBUG = true;
 
-void Klog(const char* const _Format, ...) {
+inline void Klog(const char* const _Format, ...) {
     if (!DEBUG)
         return;
 

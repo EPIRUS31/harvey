@@ -150,7 +150,7 @@ typedef NTSTATUS(*IoCreateDriver_t)(PUNICODE_STRING DriverName, PDRIVER_INITIALI
 typedef NTSTATUS(*IoCreateSymbolicLink_t)(PUNICODE_STRING SymbolicLinkName, PUNICODE_STRING DeviceName);
 typedef NTSTATUS(*IoCreateDevice_t)(PDRIVER_OBJECT DriverObject, ULONG DeviceExtensionSize, PUNICODE_STRING DeviceName, DEVICE_TYPE DeviceType, ULONG DeviceCharacteristics, BOOLEAN Exclusive, PDEVICE_OBJECT* DeviceObject);
 typedef PHYSICAL_MEMORY_RANGE* (*MmGetPhysicalMemoryRanges_t)();
-typedef NTSTATUS(*MmCopyMemory_t)(PVOID Destination, PHYSICAL_ADDRESS Source, SIZE_T Length, ULONG Flags, SIZE_T* BytesWritten);
+typedef NTSTATUS(*MmCopyMemory_t)(PVOID Destination, MM_COPY_ADDRESS Source, SIZE_T Length, ULONG Flags, SIZE_T* BytesWritten);
 typedef PVOID(*MmMapIoSpaceEx_t)(PHYSICAL_ADDRESS PhysicalAddress, SIZE_T NumberOfBytes, ULONG Protect);
 typedef VOID(*MmUnmapIoSpace_t)(PVOID BaseAddress, SIZE_T NumberOfBytes);
 typedef KIRQL(*KeAcquireSpinLockRaiseToDpc_t)(_Inout_ PKSPIN_LOCK SpinLock);

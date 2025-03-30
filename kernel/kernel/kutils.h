@@ -6,7 +6,7 @@
 
 namespace kutil
 {
-    PKLDR_DATA_TABLE_ENTRY pGetModuleInfo(LPCWSTR ModuleName)
+    inline PKLDR_DATA_TABLE_ENTRY pGetModuleInfo(LPCWSTR ModuleName)
     {
         if (!ModuleName || IsListEmpty(PsLoadedModuleList))
             return nullptr;
@@ -43,7 +43,7 @@ namespace kutil
         kport::ExFreePoolWithTag(ModuleNameUS, 'vMQA');
         return Result;
     }
-    PDEVICE_OBJECT pGetDeviceObject(LPCWSTR DosDevice)
+    inline PDEVICE_OBJECT pGetDeviceObject(LPCWSTR DosDevice)
     {
         if (!DosDevice)
             return nullptr;
@@ -69,7 +69,7 @@ namespace kutil
 
         return Device;
     }
-    BOOLEAN IsKernelDebuggingEnable()
+    inline BOOLEAN IsKernelDebuggingEnable()
     {
         if (SharedUserData->KdDebuggerEnabled || KdDebuggerEnabled || !KdDebuggerNotPresent)
         {

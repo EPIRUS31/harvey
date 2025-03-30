@@ -4,6 +4,7 @@
 #include <ntifs.h>
 #include <ntddk.h>
 #include <windef.h>
+#include <ntdef.h>
 #include <ntstrsafe.h>
 #include <intrin.h>
 #include <stdarg.h> 
@@ -12,5 +13,7 @@
 #include "mmtypes.h"
 
 EXTERN_C PLIST_ENTRY PsLoadedModuleList;
+extern "C" PVOID NTAPI PsGetProcessSectionBaseAddress(PEPROCESS Process);
+
 
 #endif // !INCLUDE_H
