@@ -23,5 +23,8 @@
     <ClInclude Include="kernel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ntloadup.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -19,7 +19,8 @@ struct SystemRequest
     enum _CALL
     {
         read,
-        write
+        write,
+        cache
     }CALL;
 };
 
@@ -27,6 +28,7 @@ NTSTATUS ReadPhysicalMemoryWrapper(PVOID targetAddress, PVOID buffer, SIZE_T siz
 NTSTATUS WritePhysicalMemoryWrapper(PVOID targetAddress, PVOID buffer, SIZE_T size, SIZE_T* bytesWrote);
 UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress);
 UINT64 BruteForceDTB();
+NTSTATUS CacheDtb(SystemRequest* Request);
 
 namespace target
 {

@@ -49,7 +49,7 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pReg
 
     auto devName = X(L"\\Device\\gpuenergydrv");
     auto symName = X(L"\\DosDevices\\gpuenergydrv");
-    auto custSymName = X(L"\\DosDevices\\harveygggg");
+    auto custSymName = X(L"\\DosDevices\\sigmadriver");
 
     RtlInitUnicodeString(&KGLOBAL::DeviceName, devName.decrypt());
     RtlInitUnicodeString(&KGLOBAL::SymbolicName, symName.decrypt());

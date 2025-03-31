@@ -187,13 +187,51 @@ UINT64 BruteForceDTB()
 	ExFreePool(physicalRanges);
 	return foundDTB;
 }
+NTSTATUS CacheDtb(SystemRequest* Request)
+{
+	if (!Request || !Request->Process)
+	{
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	NTSTATUS status = STATUS_SUCCESS;
+
+	if (target::pTarget)
+	{
+		ObDereferenceObject(target::pTarget);
+		target::pTarget = nullptr;
+	}
+
+	status = PsLookupProcessByProcessId((HANDLE)Request->Process, &target::pTarget);
+	if (!NT_SUCCESS(status))
+	{
+		return status;
+	}
+
+	target::BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(target::pTarget);
+	if (!target::BaseSectionAddress)
+	{
+		ObDereferenceObject(target::pTarget);
+		target::pTarget = nullptr;
+		return STATUS_INVALID_ADDRESS;
+	}
+
+	target::DirectoryTableBase = BruteForceDTB();
+	if (!target::DirectoryTableBase)
+	{
+		ObDereferenceObject(target::pTarget);
+		target::pTarget = nullptr;
+		return STATUS_INVALID_ADDRESS;
+	}
+
+	return status;
+}
 
 namespace target
 {
 	inline PEPROCESS pTarget = nullptr;
 	inline UINT64 BaseSectionAddress = 0;
 	inline UINT64 DirectoryTableBase = 0;
-	inline int RequestCount = 0;
 
 	NTSTATUS ReadVirtualMemory(SystemRequest* Request)
 	{
@@ -202,32 +240,9 @@ namespace target
 
 		NTSTATUS status = STATUS_SUCCESS;
 
-		RequestCount++;
-		if (RequestCount >= 2000 || !DirectoryTableBase)
+		if (!DirectoryTableBase)
 		{
-			if (!pTarget)
-			{
-				status = PsLookupProcessByProcessId((HANDLE)Request->Process, &pTarget);
-				if (!NT_SUCCESS(status))
-				{
-					return status;
-				}
-			}
-
-			BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(pTarget);
-			if (!BaseSectionAddress)
-			{
-				status = STATUS_INVALID_ADDRESS;
-				return status;
-			}
-
-			DirectoryTableBase = BruteForceDTB();
-			if (!DirectoryTableBase)
-			{
-				status = STATUS_INVALID_ADDRESS;
-				return status;
-			}
-			RequestCount = 0;
+			return STATUS_INVALID_ADDRESS;
 		}
 
 		UINT64 Physical = TranslateLinearAddress(DirectoryTableBase, (UINT64)Request->Address);
@@ -257,32 +272,9 @@ namespace target
 
 		NTSTATUS status = STATUS_SUCCESS;
 
-		RequestCount++;
-		if (RequestCount >= 2000 || !DirectoryTableBase)
+		if (!DirectoryTableBase)
 		{
-			if (!pTarget)
-			{
-				status = PsLookupProcessByProcessId((HANDLE)Request->Process, &pTarget);
-				if (!NT_SUCCESS(status))
-				{
-					return status;
-				}
-			}
-
-			BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(pTarget);
-			if (!BaseSectionAddress)
-			{
-				status = STATUS_INVALID_ADDRESS;
-				return status;
-			}
-
-			DirectoryTableBase = BruteForceDTB();
-			if (!DirectoryTableBase)
-			{
-				status = STATUS_INVALID_ADDRESS;
-				return status;
-			}
-			RequestCount = 0;
+			return STATUS_INVALID_ADDRESS;
 		}
 
 		UINT64 Physical = TranslateLinearAddress(DirectoryTableBase, (UINT64)Request->Address);
@@ -337,6 +329,10 @@ NTSTATUS deviceiocontrol::IO_IRP_MJ_DEVICE_CONTROL(PDEVICE_OBJECT pDeviceObject,
 
 	case SystemRequest::write:
 		status = target::WriteVirtualMemory(request);
+		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
+		break;
+	case SystemRequest::cache:
+		status = CacheDtb(request);
 		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
 		break;
 

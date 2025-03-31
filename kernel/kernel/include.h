@@ -13,7 +13,7 @@
 #include "mmtypes.h"
 
 EXTERN_C PLIST_ENTRY PsLoadedModuleList;
-extern "C" PVOID NTAPI PsGetProcessSectionBaseAddress(PEPROCESS Process);
+EXTERN_C PVOID NTAPI PsGetProcessSectionBaseAddress(PEPROCESS Process);
 
 
 #endif // !INCLUDE_H

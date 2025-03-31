@@ -1,35 +1,24 @@
 #include "kernel.h"
+#include <chrono>
+#include <iostream>
 
 int main()
 {
-	if (!kernel.Attach(L"RustClient.exe"))
-	{
-		std::cout << "failed to attach\n";
-		return -1;
-	}
+    if (!kernel.Attach(L"notepad.exe"))
+    {
+        printf("failed to attach\n");
+        std::cin.get();
+        return -1;
+    }
 
-	std::cout << "attached\n";
-	std::cout << "process id " << kernel.processHandle << "\n";
-	std::cout << "driver id " << kernel.kernelHandle << "\n";
-
-	uintptr_t base = kernel.GetModuleBase(L"GameAssembly.dll");
-
-	std::cout << "gameassembly : " << base << "\n";
-
-	char Buffer[256];
-	
-	for (int i = 0; i < 6000; i++)
-	{
-		kernel.ReadVirtualMemory(base, &Buffer, sizeof(Buffer));
-		std::cout << Buffer[0] << Buffer[1] << "\n";
-	}
+    printf("attached\n");
+    printf("process id : %ld\n", kernel.processHandle);
+    printf("kernel id : %p\n", kernel.kernelHandle);
 
 
 
-
-
-		
-	kernel.Detach();
-	std::cin.get();
-	return 0;
+    kernel.Detach();
+    printf("detached\n");
+    std::cin.get();
+    return 0;
 }
