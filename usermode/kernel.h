@@ -254,6 +254,19 @@ public:
         return 0;
     }
 
+
+    template<typename T> T read(uintptr_t Address)
+    {
+        T Buffer{};
+        this->ReadVirtualMemory(Address, &Buffer, sizeof(T));
+        return Buffer;
+    }
+
+    template<typename T> void write(uintptr_t Address, const T& Buffer)
+    {
+        this->WriteVirtualMemory(Address, &Buffer, sizeof(T));
+    }
+
 } kernel;
 
 
