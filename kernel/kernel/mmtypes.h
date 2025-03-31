@@ -32,30 +32,30 @@ typedef struct _KLDR_DATA_TABLE_ENTRY
     ULONG TimeDateStamp;
 } KLDR_DATA_TABLE_ENTRY, * PKLDR_DATA_TABLE_ENTRY;
 
-#define IMAGE_DOS_SIGNATURE 0x5A4D
+#define IMAGE_DOS_SIGNATURE                 0x5A4D
 
-struct _IMAGE_DOS_HEADER
+typedef struct _IMAGE_DOS_HEADER
 {
-    USHORT e_magic;                                                         //0x0
-    USHORT e_cblp;                                                          //0x2
-    USHORT e_cp;                                                            //0x4
-    USHORT e_crlc;                                                          //0x6
-    USHORT e_cparhdr;                                                       //0x8
-    USHORT e_minalloc;                                                      //0xa
-    USHORT e_maxalloc;                                                      //0xc
-    USHORT e_ss;                                                            //0xe
-    USHORT e_sp;                                                            //0x10
-    USHORT e_csum;                                                          //0x12
-    USHORT e_ip;                                                            //0x14
-    USHORT e_cs;                                                            //0x16
-    USHORT e_lfarlc;                                                        //0x18
-    USHORT e_ovno;                                                          //0x1a
-    USHORT e_res[4];                                                        //0x1c
-    USHORT e_oemid;                                                         //0x24
-    USHORT e_oeminfo;                                                       //0x26
-    USHORT e_res2[10];                                                      //0x28
-    LONG e_lfanew;                                                          //0x3c
-};
+    WORD e_magic;
+    WORD e_cblp;
+    WORD e_cp;
+    WORD e_crlc;
+    WORD e_cparhdr;
+    WORD e_minalloc;
+    WORD e_maxalloc;
+    WORD e_ss;
+    WORD e_sp;
+    WORD e_csum;
+    WORD e_ip;
+    WORD e_cs;
+    WORD e_lfarlc;
+    WORD e_ovno;
+    WORD e_res[4];
+    WORD e_oemid;
+    WORD e_oeminfo;
+    WORD e_res2[10];
+    LONG e_lfanew;
+} IMAGE_DOS_HEADER, * PIMAGE_DOS_HEADER;
 
 typedef union _virt_addr_t
 {

@@ -51,7 +51,7 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 
 	DirectoryTableBase &= ~0xf;
 	virt_addr_t virtualBase;
-	virtualBase.value = (void*)target::BaseSectionAddress;
+	virtualBase.value = (void*)VirtualAddress; 
 	MMPTE pml4Entry = { 0 };
 	SIZE_T bytesRead = 0;
 
@@ -87,6 +87,11 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 	if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE) || !pdEntry.u.Hard.Valid)
 		return 0;
 
+	if (pdEntry.u.Hard.LargePage)
+	{
+		return (pdEntry.u.Hard.PageFrameNumber << 21) | (VirtualAddress & 0x1FFFFF);
+	}
+
 	MMPTE ptEntry = { 0 };
 	status = ReadPhysicalMemoryWrapper(
 		(PVOID)((pdEntry.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pt_index),
@@ -98,7 +103,7 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 	if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE) || !ptEntry.u.Hard.Valid)
 		return 0;
 
-	return (ptEntry.u.Hard.PageFrameNumber << 12) | (VirtualAddress & 0xfff);
+	return (ptEntry.u.Hard.PageFrameNumber << 12) | (VirtualAddress & 0xFFF);
 }
 UINT64 BruteForceDTB()
 {
@@ -129,13 +134,13 @@ UINT64 BruteForceDTB()
 			}
 
 			UINT64 currentPhysical = currentRange.BaseAddress.QuadPart;
-			UINT64 rangeEnd = currentPhysical + currentRange.NumberOfBytes.QuadPart;
 
-			for (; currentPhysical < rangeEnd; currentPhysical += PAGE_SIZE)
+			for (int j = 0; j < (currentRange.NumberOfBytes.QuadPart / PAGE_SIZE); j++, currentPhysical += PAGE_SIZE)
 			{
 				MMPTE pml4Entry = { 0 };
 				SIZE_T bytesRead = 0;
 				UINT64 pml4Addr = currentPhysical + 8 * virtualBase.pml4_index;
+
 				NTSTATUS status = ReadPhysicalMemoryWrapper(
 					(PVOID)pml4Addr,
 					&pml4Entry,
@@ -146,8 +151,53 @@ UINT64 BruteForceDTB()
 				{
 					continue;
 				}
-				
+
 				if (!pml4Entry.u.Hard.Valid)
+					continue;
+
+				MMPTE pdpte = { 0 };
+				status = ReadPhysicalMemoryWrapper(
+					(PVOID)((pml4Entry.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pdpt_index),
+					&pdpte,
+					sizeof(MMPTE),
+					&bytesRead
+				);
+				if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE))
+				{
+					continue;
+				}
+
+				if (!pdpte.u.Hard.Valid)
+					continue;
+
+				MMPTE pde = { 0 };
+				status = ReadPhysicalMemoryWrapper(
+					(PVOID)((pdpte.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pd_index),
+					&pde,
+					sizeof(MMPTE),
+					&bytesRead
+				);
+				if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE))
+				{
+					continue;
+				}
+
+				if (!pde.u.Hard.Valid)
+					continue;
+
+				MMPTE pte = { 0 };
+				status = ReadPhysicalMemoryWrapper(
+					(PVOID)((pde.u.Hard.PageFrameNumber << 12) + 8 * virtualBase.pt_index),
+					&pte,
+					sizeof(MMPTE),
+					&bytesRead
+				);
+				if (!NT_SUCCESS(status) || bytesRead != sizeof(MMPTE))
+				{
+					continue;
+				}
+
+				if (!pte.u.Hard.Valid)
 					continue;
 
 				UINT64 physicalBase = TranslateLinearAddress(currentPhysical, baseAddress);
@@ -156,11 +206,11 @@ UINT64 BruteForceDTB()
 					continue;
 				}
 
-				char buffer[sizeof(_IMAGE_DOS_HEADER)] = { 0 };
+				char buffer[sizeof(IMAGE_DOS_HEADER)];
 				status = ReadPhysicalMemoryWrapper(
 					(PVOID)physicalBase,
 					buffer,
-					sizeof(_IMAGE_DOS_HEADER),
+					sizeof(IMAGE_DOS_HEADER),
 					&bytesRead
 				);
 				if (!NT_SUCCESS(status) || bytesRead != sizeof(_IMAGE_DOS_HEADER))
@@ -168,7 +218,7 @@ UINT64 BruteForceDTB()
 					continue;
 				}
 
-				_IMAGE_DOS_HEADER* header = (_IMAGE_DOS_HEADER*)buffer;
+				PIMAGE_DOS_HEADER header = reinterpret_cast<PIMAGE_DOS_HEADER>(buffer);
 				if (header->e_magic != IMAGE_DOS_SIGNATURE)
 					continue;
 
@@ -187,44 +237,97 @@ UINT64 BruteForceDTB()
 	ExFreePool(physicalRanges);
 	return foundDTB;
 }
-NTSTATUS CacheDtb(SystemRequest* Request)
+
+typedef struct _CACHE_DTB_WORK_CONTEXT {
+	PDEVICE_OBJECT DeviceObject;    
+	SystemRequest* Request;        
+	PIO_WORKITEM WorkItem;      
+	KEVENT CompletionEvent;         
+	NTSTATUS Status;               
+} CACHE_DTB_WORK_CONTEXT, * PCACHE_DTB_WORK_CONTEXT;
+
+VOID CacheDtbWorkerRoutine(
+	PDEVICE_OBJECT DeviceObject,
+	PVOID Context
+)
 {
-	if (!Request || !Request->Process)
-	{
-		return STATUS_INVALID_PARAMETER;
-	}
+	PCACHE_DTB_WORK_CONTEXT workContext = (PCACHE_DTB_WORK_CONTEXT)Context;
 
 	NTSTATUS status = STATUS_SUCCESS;
 
-	if (target::pTarget)
-	{
+	if (!workContext->Request || !workContext->Request->Process) {
+		status = STATUS_INVALID_PARAMETER;
+		goto cleanup;
+	}
+
+	if (target::pTarget) {
 		ObDereferenceObject(target::pTarget);
 		target::pTarget = nullptr;
 	}
 
-	status = PsLookupProcessByProcessId((HANDLE)Request->Process, &target::pTarget);
-	if (!NT_SUCCESS(status))
-	{
-		return status;
+	status = PsLookupProcessByProcessId((HANDLE)workContext->Request->Process, &target::pTarget);
+	if (!NT_SUCCESS(status)) {
+		goto cleanup;
 	}
 
 	target::BaseSectionAddress = (UINT64)PsGetProcessSectionBaseAddress(target::pTarget);
-	if (!target::BaseSectionAddress)
-	{
+	if (!target::BaseSectionAddress) {
 		ObDereferenceObject(target::pTarget);
 		target::pTarget = nullptr;
-		return STATUS_INVALID_ADDRESS;
+		status = STATUS_INVALID_ADDRESS;
+		goto cleanup;
 	}
 
 	target::DirectoryTableBase = BruteForceDTB();
-	if (!target::DirectoryTableBase)
-	{
+	if (!target::DirectoryTableBase) {
 		ObDereferenceObject(target::pTarget);
 		target::pTarget = nullptr;
-		return STATUS_INVALID_ADDRESS;
+		status = STATUS_INVALID_ADDRESS;
+		goto cleanup;
 	}
 
-	return status;
+cleanup:
+	workContext->Status = status;
+
+	KeSetEvent(&workContext->CompletionEvent, IO_NO_INCREMENT, FALSE);
+	IoFreeWorkItem(workContext->WorkItem);
+	ExFreePool(workContext);
+}
+
+NTSTATUS CacheDtb(SystemRequest* Request, PDEVICE_OBJECT DeviceObject)
+{
+	if (!Request || !Request->Process) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	PCACHE_DTB_WORK_CONTEXT workContext = (PCACHE_DTB_WORK_CONTEXT)ExAllocatePoolWithTag(
+		NonPagedPool,
+		sizeof(CACHE_DTB_WORK_CONTEXT),
+		'DTBC'
+	);
+	if (!workContext) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	workContext->DeviceObject = DeviceObject;
+	workContext->Request = Request;
+	workContext->WorkItem = IoAllocateWorkItem(DeviceObject);
+	workContext->Status = STATUS_PENDING;
+	KeInitializeEvent(&workContext->CompletionEvent, NotificationEvent, FALSE);
+
+	if (!workContext->WorkItem) {
+		ExFreePool(workContext);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	IoQueueWorkItem(
+		workContext->WorkItem,
+		CacheDtbWorkerRoutine,
+		DelayedWorkQueue,
+		workContext
+	);
+
+	return STATUS_PENDING;
 }
 
 namespace target
@@ -332,7 +435,9 @@ NTSTATUS deviceiocontrol::IO_IRP_MJ_DEVICE_CONTROL(PDEVICE_OBJECT pDeviceObject,
 		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
 		break;
 	case SystemRequest::cache:
-		status = CacheDtb(request);
+		status = CacheDtb(request, pDeviceObject);
+		Klog(X("target::DirectoryTableBase = %p"), target::DirectoryTableBase);
+		Klog(X("target::Base = %p"), target::BaseSectionAddress);
 		pIrp->IoStatus.Information = NT_SUCCESS(status) ? request->BufferSize : 0;
 		break;
 

@@ -7,6 +7,7 @@
 #include <winternl.h>
 #include <thread>
 #include "ntloadup.h"
+#define STATUS_SUCCESS  ((NTSTATUS)0x00000000L)
 
 typedef NTSTATUS(
 NTAPI*
@@ -53,12 +54,13 @@ const ULONG DRIVER_CALL = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, 
 
 inline class _kernel
 {
-public:
-    HANDLE kernelHandle = INVALID_HANDLE_VALUE;
-    INT processHandle = 0;
+private:
     std::thread caching;
     bool isCaching = false;
     NtDeviceIoControlFile_t NtDeviceIoControlFileImport;
+public:
+    HANDLE kernelHandle = INVALID_HANDLE_VALUE;
+    INT processHandle = 0;
 
     bool CacheProcessDirectoryTableBase()
     {
@@ -83,7 +85,7 @@ public:
             sizeof(Request)
         );
 
-        return NT_SUCCESS(status);
+        return NT_SUCCESS(ioStatus.Status);
     }
 
     void CacheThread()
@@ -135,7 +137,7 @@ public:
         }
 
         kernelHandle = CreateFileW(
-            L"\\\\.\\sigmadriver",
+            L"\\\\.\\sigmadriverr",
             GENERIC_READ | GENERIC_WRITE,
             0,
             NULL,
@@ -195,7 +197,7 @@ public:
             sizeof(Request)
         );
 
-        return NT_SUCCESS(status);
+        return NT_SUCCESS(ioStatus.Status);
     }
 
     bool WriteVirtualMemory(uintptr_t Address, void* Buffer, SIZE_T Size)
@@ -224,7 +226,7 @@ public:
             sizeof(Request)
         );
 
-        return NT_SUCCESS(status);
+        return NT_SUCCESS(ioStatus.Status);
     }
 
     uintptr_t GetModuleBase(const wchar_t* ModuleName)
@@ -255,14 +257,16 @@ public:
     }
 
 
-    template<typename T> T read(uintptr_t Address)
+    template<typename T>
+    T read(uintptr_t Address)
     {
         T Buffer{};
         this->ReadVirtualMemory(Address, &Buffer, sizeof(T));
         return Buffer;
     }
 
-    template<typename T> void write(uintptr_t Address, const T& Buffer)
+    template<typename T>
+    void write(uintptr_t Address, const T& Buffer)
     {
         this->WriteVirtualMemory(Address, &Buffer, sizeof(T));
     }

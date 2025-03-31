@@ -3,7 +3,7 @@
 
 #include "include.h"
 
-inline BOOLEAN DEBUG = true;
+inline BOOLEAN DEBUG = false;
 
 inline void Klog(const char* const _Format, ...) {
     if (!DEBUG)
