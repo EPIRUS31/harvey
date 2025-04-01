@@ -20,10 +20,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="kernel.h">
+    <ClInclude Include="ntloadup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ntloadup.h">
+    <ClInclude Include="kernel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -4,49 +4,24 @@
 
 int main()
 {
-    if (!kernel.Attach(L"cmd.exe"))
+    if (!kernel.Attach(L"AOCClient-Win64-Shipping.exe"))
     {
         printf("failed to attach\n");
         std::cin.get();
         return -1;
     }
 
+    uintptr_t processbase = 0x7ff7dda20000;
+
     printf("attached\n");
     printf("process id : %ld\n", kernel.processHandle);
     printf("kernel id : %p\n", kernel.kernelHandle);
-
-    uintptr_t RustClient_base = kernel.GetModuleBase(L"cmd.exe");
-    printf("RustClient base : 0x%p\n", (void*)RustClient_base);
-
-    char Buffer[32];
-
-    if (!kernel.ReadVirtualMemory(RustClient_base, Buffer, sizeof(Buffer)))
-    {
-        printf("Failed to read memory\n");
-        kernel.Detach();
-        std::cin.get();
-        return -1;
-    }
-
-    printf("MZ Header: %c%c\n", Buffer[0], Buffer[1]);
+    printf("process base : 0x%p\n", (void*)processbase);
 
 
-
-   // Buffer[0] = 'E';
-   // Buffer[1] = 'Z';
-   // kernel.WriteVirtualMemory(RustClient_base, Buffer, sizeof(Buffer));
-
-    if (!kernel.ReadVirtualMemory(RustClient_base, Buffer, sizeof(Buffer)))
-    {
-        printf("Failed to read memory\n");
-        kernel.Detach();
-        std::cin.get();
-        return -1;
-    }
-
-    printf("MZ Header: %c%c\n", Buffer[0], Buffer[1]);
-    
-    
+    char buffer[26];
+    kernel.ReadVirtualMemory(processbase, buffer, sizeof(buffer));
+    std::cout << buffer[0] << buffer[1] << "\n";
 
     kernel.Detach();
     printf("detached\n");

@@ -10,19 +10,19 @@
 #define STATUS_SUCCESS  ((NTSTATUS)0x00000000L)
 
 typedef NTSTATUS(
-NTAPI*
-NtDeviceIoControlFile_t)(
-    IN HANDLE FileHandle,
-    IN HANDLE Event OPTIONAL,
-    IN PIO_APC_ROUTINE ApcRoutine OPTIONAL,
-    IN PVOID ApcContext OPTIONAL,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    IN ULONG IoControlCode,
-    IN PVOID InputBuffer OPTIONAL,
-    IN ULONG InputBufferLength,
-    OUT PVOID OutputBuffer OPTIONAL,
-    IN ULONG OutputBufferLength
-);
+    NTAPI*
+    NtDeviceIoControlFile_t)(
+        IN HANDLE FileHandle,
+        IN HANDLE Event OPTIONAL,
+        IN PIO_APC_ROUTINE ApcRoutine OPTIONAL,
+        IN PVOID ApcContext OPTIONAL,
+        OUT PIO_STATUS_BLOCK IoStatusBlock,
+        IN ULONG IoControlCode,
+        IN PVOID InputBuffer OPTIONAL,
+        IN ULONG InputBufferLength,
+        OUT PVOID OutputBuffer OPTIONAL,
+        IN ULONG OutputBufferLength
+        );
 
 inline BOOLEAN DEBUG = false;
 
@@ -152,7 +152,7 @@ public:
             return false;
         }
 
-        
+
         isCaching = true;
         caching = std::thread(&_kernel::CacheThread, this);
         caching.detach();
@@ -234,6 +234,8 @@ public:
         if (!processHandle)
             return 0;
 
+        HANDLE process = OpenProcess(PROCESS_ALL_ACCESS, false, this->processHandle);
+
         HANDLE SnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, processHandle);
         if (SnapShot == INVALID_HANDLE_VALUE)
             return 0;
@@ -247,11 +249,12 @@ public:
             if (_wcsicmp(ModuleEntry.szModule, ModuleName) == 0)
             {
                 CloseHandle(SnapShot);
+                CloseHandle(process);
                 return (uintptr_t)ModuleEntry.modBaseAddr;
             }
             success = Module32NextW(SnapShot, &ModuleEntry);
         }
-
+        CloseHandle(process);
         CloseHandle(SnapShot);
         return 0;
     }
