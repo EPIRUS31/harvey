@@ -103,8 +103,8 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pReg
     }
   
     Klog(X("leet link created #based"));
-    
 
     Klog(X("bro driver was success"));
+
     return STATUS_SUCCESS;
 }

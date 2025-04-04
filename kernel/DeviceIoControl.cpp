@@ -44,6 +44,7 @@ NTSTATUS WritePhysicalMemoryWrapper(PVOID targetAddress, PVOID buffer, SIZE_T si
 
 	return status;
 }
+
 UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 {
 	if (!DirectoryTableBase || !VirtualAddress)
@@ -105,6 +106,7 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress)
 
 	return (ptEntry.u.Hard.PageFrameNumber << 12) | (VirtualAddress & 0xFFF);
 }
+
 UINT64 BruteForceDTB()
 {
 	UINT64 baseAddress = target::BaseSectionAddress;
