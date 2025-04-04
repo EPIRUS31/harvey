@@ -16,8 +16,6 @@ kernel
 |  `Write`  | `Address`      | `auto`     | Writes memory                    |
 |`GetModuleBase`| `ModuleName` | `uintptr_t`   | Gets Module Base            |
 
-## For any issues contact me bro... 
-
 ## Performance Context
 - **Size of reads** : 1000 bytes ( AKA MAX READ AMMOUNT )
 - **Reads per Second**: 437,349.66
