@@ -17,7 +17,7 @@ kernel
 |`GetModuleBase`| `ModuleName` | `uintptr_t`   | Gets Module Base            |
 
 ## Performance Context
-- **Size of reads** : 1000 bytes ( AKA MAX READ AMMOUNT )
+- **Size of reads** : 1000 bytes ( PAGE_SIZE )
 - **Reads per Second**: 437,349.66
 - **Read Size**: 4 bytes per read
 - **Total Reads Example**: 10,000,000 reads took 22,865 ms (from previous analysis)
